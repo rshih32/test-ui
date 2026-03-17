@@ -3,9 +3,7 @@ import os
 import time
 from datetime import datetime
 from collections import Counter
-from PIL import Image, ImageDraw, ImageFont
-import io
-
+from PIL import Image
 LOG_FILE = os.path.join(os.path.expanduser("~"), "Desktop", "command_logs", "commands.txt")
 
 st.set_page_config(
@@ -70,59 +68,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-def make_banner():
-    w, h = 900, 160
-    img = Image.new("RGB", (w, h), "#0d1117")
-    draw = ImageDraw.Draw(img)
-
-    for i in range(h):
-        r = int(13 + (33 - 13) * i / h)
-        g = int(17 + (43 - 17) * i / h)
-        b = int(23 + (55 - 23) * i / h)
-        draw.line([(0, i), (w, i)], fill=(r, g, b))
-
-    # Grid lines
-    for x in range(0, w, 40):
-        draw.line([(x, 0), (x, h)], fill=(30, 40, 50), width=1)
-    for y in range(0, h, 40):
-        draw.line([(0, y), (w, y)], fill=(30, 40, 50), width=1)
-
-    # Glow circles
-    for cx, cy, rad, col in [
-        (80, 80, 55, (88, 166, 255, 60)),
-        (820, 80, 40, (121, 192, 255, 40)),
-        (450, 40, 25, (88, 166, 255, 30)),
-    ]:
-        overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        od = ImageDraw.Draw(overlay)
-        od.ellipse([cx - rad, cy - rad, cx + rad, cy + rad], fill=col)
-        img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
-        draw = ImageDraw.Draw(img)
-
-    # Terminal icon
-    draw.rounded_rectangle([30, 30, 120, 130], radius=10, fill="#161b22", outline="#58a6ff", width=2)
-    draw.text((47, 45), ">_", fill="#58a6ff")
-    draw.line([(45, 75), (105, 75)], fill="#30363d", width=1)
-    for i, line in enumerate(["$ ls -la", "$ cd /home", "$ git log"]):
-        draw.text((45, 85 + i * 13), line, fill="#8b949e")
-
-    try:
-        font_big = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 38)
-        font_sub = ImageFont.truetype("C:/Windows/Fonts/arial.ttf", 16)
-    except Exception:
-        font_big = ImageFont.load_default()
-        font_sub = font_big
-
-    draw.text((148, 42), "COMMAND LOGGER", font=font_big, fill="#f0f6fc")
-    draw.text((150, 90), "Real-time terminal command tracking dashboard", font=font_sub, fill="#8b949e")
-
-    now_str = datetime.now().strftime("Last updated: %Y-%m-%d %H:%M:%S")
-    draw.text((150, 115), now_str, font=font_sub, fill="#58a6ff")
-
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    buf.seek(0)
-    return buf
+BANNER_PATH = os.path.join(os.path.dirname(__file__), "banner.png")
 
 
 def parse_logs():
@@ -144,7 +90,10 @@ def parse_logs():
 
 
 # ── Banner ──────────────────────────────────────────────────────────────
-st.image(make_banner(), use_container_width=True)
+if os.path.exists(BANNER_PATH):
+    st.image(Image.open(BANNER_PATH), use_container_width=True)
+else:
+    st.warning("Banner image not found. Save banner.png to the project folder.")
 
 # ── Controls ─────────────────────────────────────────────────────────────
 col_ctrl1, col_ctrl2, col_ctrl3 = st.columns([1, 1, 4])
@@ -176,6 +125,20 @@ for col, val, label in [
             <div class="metric-value">{val}</div>
             <div class="metric-label">{label}</div>
         </div>""", unsafe_allow_html=True)
+
+# ── Current Tracker ───────────────────────────────────────────────────────
+st.markdown('<div class="section-header">🎯 Current Tracker</div>', unsafe_allow_html=True)
+_, center, _ = st.columns([1, 2, 1])
+with center:
+    current_cmd = entries[-1]["cmd"] if entries else "No commands yet"
+    current_time = entries[-1]["time"] if entries else "—"
+    st.markdown(f"""
+    <div class="metric-card" style="padding: 30px; border-color: #ff4444;">
+        <div style="font-size:0.8rem; color:#8b949e; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Last Command Tracked</div>
+        <div style="font-size:1.6rem; font-weight:700; color:#ff6b6b; font-family:'Courier New',monospace;">$ {current_cmd}</div>
+        <div style="font-size:0.85rem; color:#58a6ff; margin-top:10px;">{current_time}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ── Two-column layout ─────────────────────────────────────────────────────
 left, right = st.columns([3, 2])
