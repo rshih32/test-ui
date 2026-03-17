@@ -66,14 +66,15 @@ def get_current_command():
             last_enter = i
     buf = []
     for line in lines[last_enter + 1:]:
-        line = line.strip()
-        if not line:
+        # Split on '] ' to extract key — handles spaces and special chars safely
+        parts = line.split('] ', 1)
+        if len(parts) < 2:
             continue
-        key = line[26:].rstrip('\n') if len(line) > 26 else ""
+        key = parts[1].rstrip('\r\n')
         if key == "[BACKSPACE]":
             if buf: buf.pop()
         elif key.startswith("[") and key.endswith("]"):
-            pass
+            pass  # ignore arrow keys, ESC, etc.
         else:
             buf.append(key)
     return "".join(buf)
