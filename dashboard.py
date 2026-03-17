@@ -90,7 +90,7 @@ def get_current_command():
         line = line.strip()
         if not line:
             continue
-        key = line[27:].strip() if len(line) > 27 else ""
+        key = line[26:].strip() if len(line) > 26 else ""
         if key == "[BACKSPACE]":
             if buf:
                 buf.pop()
