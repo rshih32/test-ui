@@ -1,106 +1,85 @@
 import streamlit as st
 import os
 import time
+import io
 from datetime import datetime
-from PIL import Image
-LOG_FILE = os.path.join(os.path.expanduser("~"), "Desktop", "command_logs", "commands.txt")
-KEYS_FILE = os.path.join(os.path.expanduser("~"), "Desktop", "command_logs", "keystrokes.txt")
+from PIL import Image, ImageDraw, ImageFont
 
-st.set_page_config(
-    page_title="Command Logger",
-    page_icon="🖥️",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
+LOG_FILE    = os.path.join(os.path.expanduser("~"), "Desktop", "command_logs", "commands.txt")
+KEYS_FILE   = os.path.join(os.path.expanduser("~"), "Desktop", "command_logs", "keystrokes.txt")
+BANNER_PATH = os.path.join(os.path.dirname(__file__), "banner.png")
+
+APP_NAME    = "SHADOWLOG"
+APP_TAGLINE = "Real-time terminal command tracker"
+
+st.set_page_config(page_title=APP_NAME, page_icon="💀", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
     .stApp { background-color: #0d1117; color: #c9d1d9; }
-
+    .block-container { padding-top: 0 !important; padding-bottom: 1rem !important; }
     .metric-card {
         background: linear-gradient(135deg, #161b22, #21262d);
         border: 1px solid #30363d;
-        border-radius: 12px;
-        padding: 20px;
+        border-radius: 10px;
+        padding: 14px 18px;
         text-align: center;
     }
-    .metric-value {
-        font-size: 2.5rem;
-        font-weight: 700;
-        color: #58a6ff;
-    }
-    .metric-label {
-        font-size: 0.85rem;
-        color: #8b949e;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
+    .metric-value { font-size: 2rem; font-weight: 700; color: #58a6ff; line-height: 1.2; }
+    .metric-label { font-size: 0.75rem; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; }
     .log-row {
         background: #161b22;
         border-left: 3px solid #58a6ff;
-        border-radius: 6px;
-        padding: 10px 15px;
-        margin: 6px 0;
+        border-radius: 5px;
+        padding: 6px 12px;
+        margin: 4px 0;
         font-family: 'Courier New', monospace;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
     }
-    .log-time { color: #8b949e; font-size: 0.8rem; }
+    .log-time { color: #8b949e; font-size: 0.75rem; }
     .log-cmd  { color: #79c0ff; font-weight: 600; }
     .section-header {
-        font-size: 1.1rem;
+        font-size: 0.85rem;
         font-weight: 600;
-        color: #f0f6fc;
-        border-bottom: 1px solid #30363d;
-        padding-bottom: 8px;
-        margin: 20px 0 12px 0;
+        color: #8b949e;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        border-bottom: 1px solid #21262d;
+        padding-bottom: 4px;
+        margin: 10px 0 8px 0;
     }
-    div[data-testid="stHorizontalBlock"] { gap: 1rem; }
-    .stButton>button {
-        background: #21262d;
-        border: 1px solid #30363d;
-        color: #c9d1d9;
-        border-radius: 8px;
-    }
-    .stButton>button:hover { border-color: #58a6ff; color: #58a6ff; }
     footer { visibility: hidden; }
     #MainMenu { visibility: hidden; }
+    div[data-testid="stHorizontalBlock"] { gap: 0.6rem; }
 </style>
 """, unsafe_allow_html=True)
 
 
-BANNER_PATH = os.path.join(os.path.dirname(__file__), "banner.png")
-
-
 def get_current_command():
-    """Read keystrokes.txt and reconstruct what's currently being typed since last [ENTER]."""
     if not os.path.exists(KEYS_FILE):
         return ""
     with open(KEYS_FILE, "r") as f:
         lines = f.readlines()
-    # Find last [ENTER], take everything after it
     last_enter = -1
     for i, line in enumerate(lines):
         if "[ENTER]" in line:
             last_enter = i
-    since_enter = lines[last_enter + 1:]
-    # Reconstruct the in-progress command
     buf = []
-    for line in since_enter:
+    for line in lines[last_enter + 1:]:
         line = line.strip()
         if not line:
             continue
-        key = line[26:].strip() if len(line) > 26 else ""
+        key = line[26:].rstrip('\n') if len(line) > 26 else ""
         if key == "[BACKSPACE]":
-            if buf:
-                buf.pop()
+            if buf: buf.pop()
         elif key.startswith("[") and key.endswith("]"):
-            pass  # ignore special keys in display
+            pass
         else:
             buf.append(key)
     return "".join(buf)
 
 
-def parse_logs():
+def parse_entries():
     if not os.path.exists(LOG_FILE):
         return []
     entries = []
@@ -110,81 +89,102 @@ def parse_logs():
             if not line:
                 continue
             try:
-                ts = line[1:20]
-                cmd = line[22:].strip()
-                entries.append({"time": ts, "cmd": cmd})
+                entries.append({"time": line[1:20], "cmd": line[22:].strip()})
             except Exception:
                 entries.append({"time": "?", "cmd": line})
     return entries
 
 
-# ── Banner ──────────────────────────────────────────────────────────────
-if os.path.exists(BANNER_PATH):
-    banner = Image.open(BANNER_PATH)
-    banner = banner.resize((banner.width, banner.height // 2))
+def make_banner():
+    if not os.path.exists(BANNER_PATH):
+        return None
+    img = Image.open(BANNER_PATH).convert("RGBA")
+    w, h = img.width, img.height // 4
+    img = img.resize((w, h))
+
+    overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    for i in range(h):
+        alpha = int(180 * (i / h))
+        draw.line([(0, i), (w, i)], fill=(0, 0, 0, alpha))
+    img = Image.alpha_composite(img, overlay)
+    draw = ImageDraw.Draw(img)
+
+    try:
+        font_title = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", max(h // 3, 20))
+        font_sub   = ImageFont.truetype("C:/Windows/Fonts/arial.ttf",   max(h // 7, 11))
+    except Exception:
+        font_title = ImageFont.load_default()
+        font_sub   = font_title
+
+    draw.text((22, h // 2 - h // 4 + 2), APP_NAME,    font=font_title, fill=(0, 0, 0, 180))
+    draw.text((20, h // 2 - h // 4),     APP_NAME,    font=font_title, fill=(255, 255, 255, 255))
+    draw.text((22, h // 2 + h // 8),     APP_TAGLINE, font=font_sub,   fill=(150, 200, 255, 220))
+
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
+
+# ── Banner ────────────────────────────────────────────────────────────────
+banner = make_banner()
+if banner:
     st.image(banner, use_container_width=True)
 else:
-    st.warning("Banner image not found. Save banner.png to the project folder.")
+    st.error("banner.png not found.")
 
-# ── Controls ─────────────────────────────────────────────────────────────
-col_ctrl1, col_ctrl2, col_ctrl3 = st.columns([1, 1, 4])
-with col_ctrl1:
-    auto_refresh = st.toggle("Live Mode", value=True)
-with col_ctrl2:
-    refresh_rate = st.selectbox("Refresh", [2, 5, 10], index=0, label_visibility="collapsed")
+# ── Controls ──────────────────────────────────────────────────────────────
+c1, c2, _ = st.columns([1, 1, 6])
+with c1:
+    auto_refresh = st.toggle("Live", value=True)
+with c2:
+    refresh_rate = st.selectbox("Rate", [2, 5, 10], index=0, label_visibility="collapsed")
 
-entries = parse_logs()
+entries = parse_entries()
 
-# ── Metrics ───────────────────────────────────────────────────────────────
-st.markdown('<div class="section-header">📊 Overview</div>', unsafe_allow_html=True)
-m1, m2 = st.columns(2)
+# ── Metrics + Current Command ─────────────────────────────────────────────
+left, right = st.columns([1, 2])
 
-total = len(entries)
-unique = len(set(e["cmd"].split()[0] for e in entries if e["cmd"])) if entries else 0
+with left:
+    st.markdown('<div class="section-header">📊 Overview</div>', unsafe_allow_html=True)
+    total  = len(entries)
+    unique = len(set(e["cmd"].split()[0] for e in entries if e["cmd"])) if entries else 0
+    m1, m2 = st.columns(2)
+    for col, val, label in [(m1, total, "Commands"), (m2, unique, "Programs")]:
+        with col:
+            st.markdown(f"""<div class="metric-card">
+                <div class="metric-value">{val}</div>
+                <div class="metric-label">{label}</div>
+            </div>""", unsafe_allow_html=True)
 
-for col, val, label in [
-    (m1, total, "Total Commands"),
-    (m2, unique, "Unique Programs"),
-]:
-    with col:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value">{val}</div>
-            <div class="metric-label">{label}</div>
+with right:
+    st.markdown('<div class="section-header">🎯 Current Command</div>', unsafe_allow_html=True)
+
+    @st.fragment(run_every=0.1)
+    def current_command_widget():
+        typing  = get_current_command()
+        display = f"$ {typing}▮" if typing else "&#x25AE; idle"
+        color   = "#ff6b6b" if typing else "#444"
+        border  = "#ff4444" if typing else "#30363d"
+        st.markdown(f"""<div class="metric-card" style="padding:14px 20px; border-color:{border};">
+            <div style="font-size:0.75rem;color:#8b949e;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Typing</div>
+            <div style="font-size:1.3rem;font-weight:700;color:{color};font-family:'Courier New',monospace;min-height:1.8rem;">{display}</div>
         </div>""", unsafe_allow_html=True)
 
-# ── Current Command ───────────────────────────────────────────────────────
-st.markdown('<div class="section-header">🎯 Current Command</div>', unsafe_allow_html=True)
-
-@st.fragment(run_every=0.1)
-def current_command_widget():
-    typing = get_current_command()
-    _, center, _ = st.columns([1, 2, 1])
-    with center:
-        display = f"$ {typing}▮" if typing else "&nbsp;"
-        color = "#ff6b6b" if typing else "#444"
-        st.markdown(f"""
-        <div class="metric-card" style="padding: 30px; border-color: {'#ff4444' if typing else '#30363d'};">
-            <div style="font-size:0.8rem; color:#8b949e; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Currently Typing</div>
-            <div style="font-size:1.6rem; font-weight:700; color:{color}; font-family:'Courier New',monospace; min-height:2.2rem;">{display}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-current_command_widget()
+    current_command_widget()
 
 # ── Command Log ───────────────────────────────────────────────────────────
 st.markdown('<div class="section-header">📋 Command Log</div>', unsafe_allow_html=True)
-shown = entries[-30:] if len(entries) > 30 else entries
-log_html = ""
-for e in reversed(shown):
-    log_html += f"""
-    <div class="log-row">
-        <span class="log-time">{e['time']}</span><br>
-        <span class="log-cmd">$ {e['cmd']}</span>
-    </div>"""
-if not log_html:
-    log_html = '<div class="log-row"><span class="log-time">Waiting for commands…</span></div>'
-st.markdown(log_html, unsafe_allow_html=True)
+shown    = entries[-30:]
+log_html = "".join(f"""<div class="log-row">
+    <span class="log-time">{e['time']}</span><br>
+    <span class="log-cmd">$ {e['cmd']}</span>
+</div>""" for e in reversed(shown))
+st.markdown(
+    log_html or '<div class="log-row"><span class="log-time">Waiting for commands…</span></div>',
+    unsafe_allow_html=True
+)
 
 # ── Auto-refresh ──────────────────────────────────────────────────────────
 if auto_refresh:
