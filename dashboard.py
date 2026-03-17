@@ -2,7 +2,6 @@ import streamlit as st
 import os
 import time
 from datetime import datetime
-from collections import Counter
 from PIL import Image
 LOG_FILE = os.path.join(os.path.expanduser("~"), "Desktop", "command_logs", "commands.txt")
 KEYS_FILE = os.path.join(os.path.expanduser("~"), "Desktop", "command_logs", "keystrokes.txt")
@@ -138,18 +137,14 @@ entries = parse_logs()
 
 # ── Metrics ───────────────────────────────────────────────────────────────
 st.markdown('<div class="section-header">📊 Overview</div>', unsafe_allow_html=True)
-m1, m2, m3, m4 = st.columns(4)
+m1, m2 = st.columns(2)
 
 total = len(entries)
 unique = len(set(e["cmd"].split()[0] for e in entries if e["cmd"])) if entries else 0
-last_cmd = entries[-1]["cmd"] if entries else "—"
-last_time = entries[-1]["time"] if entries else "—"
 
 for col, val, label in [
     (m1, total, "Total Commands"),
     (m2, unique, "Unique Programs"),
-    (m3, last_cmd[:18] + ("…" if len(last_cmd) > 18 else ""), "Last Command"),
-    (m4, last_time[11:] if last_time != "—" else "—", "Last Run"),
 ]:
     with col:
         st.markdown(f"""
@@ -177,41 +172,19 @@ def current_command_widget():
 
 current_command_widget()
 
-# ── Two-column layout ─────────────────────────────────────────────────────
-left, right = st.columns([3, 2])
-
-with left:
-    st.markdown('<div class="section-header">📋 Command Log</div>', unsafe_allow_html=True)
-    log_placeholder = st.empty()
-    shown = entries[-30:] if len(entries) > 30 else entries
-    log_html = ""
-    for e in reversed(shown):
-        log_html += f"""
-        <div class="log-row">
-            <span class="log-time">{e['time']}</span><br>
-            <span class="log-cmd">$ {e['cmd']}</span>
-        </div>"""
-    if not log_html:
-        log_html = '<div class="log-row"><span class="log-time">Waiting for commands…</span></div>'
-    log_placeholder.markdown(log_html, unsafe_allow_html=True)
-
-with right:
-    st.markdown('<div class="section-header">🏆 Top Commands</div>', unsafe_allow_html=True)
-    if entries:
-        base_cmds = [e["cmd"].split()[0] for e in entries if e["cmd"]]
-        counts = Counter(base_cmds).most_common(10)
-        cmds, vals = zip(*counts)
-        st.bar_chart({"Count": dict(zip(cmds, vals))}, color="#58a6ff")
-    else:
-        st.info("No commands logged yet.")
-
-    st.markdown('<div class="section-header">🕐 Recent Activity</div>', unsafe_allow_html=True)
-    if entries:
-        recent = entries[-5:]
-        for e in reversed(recent):
-            st.markdown(f"`{e['time'][11:]}` — **{e['cmd'][:35]}**")
-    else:
-        st.caption("Nothing yet.")
+# ── Command Log ───────────────────────────────────────────────────────────
+st.markdown('<div class="section-header">📋 Command Log</div>', unsafe_allow_html=True)
+shown = entries[-30:] if len(entries) > 30 else entries
+log_html = ""
+for e in reversed(shown):
+    log_html += f"""
+    <div class="log-row">
+        <span class="log-time">{e['time']}</span><br>
+        <span class="log-cmd">$ {e['cmd']}</span>
+    </div>"""
+if not log_html:
+    log_html = '<div class="log-row"><span class="log-time">Waiting for commands…</span></div>'
+st.markdown(log_html, unsafe_allow_html=True)
 
 # ── Auto-refresh ──────────────────────────────────────────────────────────
 if auto_refresh:
