@@ -162,7 +162,7 @@ with left:
 with right:
     st.markdown('<div class="section-header">🎯 Current Command</div>', unsafe_allow_html=True)
 
-    @st.fragment(run_every=0.1)
+    @st.fragment(run_every=0.02)
     def current_command_widget():
         typing  = get_current_command()
         display = f"$ {typing}▮" if typing else "&#x25AE; idle"
