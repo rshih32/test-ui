@@ -5,6 +5,7 @@ from datetime import datetime
 from collections import Counter
 from PIL import Image
 LOG_FILE = os.path.join(os.path.expanduser("~"), "Desktop", "command_logs", "commands.txt")
+KEYS_FILE = os.path.join(os.path.expanduser("~"), "Desktop", "command_logs", "keystrokes.txt")
 
 st.set_page_config(
     page_title="Command Logger",
@@ -71,6 +72,35 @@ st.markdown("""
 BANNER_PATH = os.path.join(os.path.dirname(__file__), "banner.png")
 
 
+def get_current_command():
+    """Read keystrokes.txt and reconstruct what's currently being typed since last [ENTER]."""
+    if not os.path.exists(KEYS_FILE):
+        return ""
+    with open(KEYS_FILE, "r") as f:
+        lines = f.readlines()
+    # Find last [ENTER], take everything after it
+    last_enter = -1
+    for i, line in enumerate(lines):
+        if "[ENTER]" in line:
+            last_enter = i
+    since_enter = lines[last_enter + 1:]
+    # Reconstruct the in-progress command
+    buf = []
+    for line in since_enter:
+        line = line.strip()
+        if not line:
+            continue
+        key = line[27:].strip() if len(line) > 27 else ""
+        if key == "[BACKSPACE]":
+            if buf:
+                buf.pop()
+        elif key.startswith("[") and key.endswith("]"):
+            pass  # ignore special keys in display
+        else:
+            buf.append(key)
+    return "".join(buf)
+
+
 def parse_logs():
     if not os.path.exists(LOG_FILE):
         return []
@@ -128,19 +158,24 @@ for col, val, label in [
             <div class="metric-label">{label}</div>
         </div>""", unsafe_allow_html=True)
 
-# ── Current Tracker ───────────────────────────────────────────────────────
-st.markdown('<div class="section-header">🎯 Current Tracker</div>', unsafe_allow_html=True)
-_, center, _ = st.columns([1, 2, 1])
-with center:
-    current_cmd = entries[-1]["cmd"] if entries else "No commands yet"
-    current_time = entries[-1]["time"] if entries else "—"
-    st.markdown(f"""
-    <div class="metric-card" style="padding: 30px; border-color: #ff4444;">
-        <div style="font-size:0.8rem; color:#8b949e; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Last Command Tracked</div>
-        <div style="font-size:1.6rem; font-weight:700; color:#ff6b6b; font-family:'Courier New',monospace;">$ {current_cmd}</div>
-        <div style="font-size:0.85rem; color:#58a6ff; margin-top:10px;">{current_time}</div>
-    </div>
-    """, unsafe_allow_html=True)
+# ── Current Command ───────────────────────────────────────────────────────
+st.markdown('<div class="section-header">🎯 Current Command</div>', unsafe_allow_html=True)
+
+@st.fragment(run_every=0.1)
+def current_command_widget():
+    typing = get_current_command()
+    _, center, _ = st.columns([1, 2, 1])
+    with center:
+        display = f"$ {typing}▮" if typing else "&nbsp;"
+        color = "#ff6b6b" if typing else "#444"
+        st.markdown(f"""
+        <div class="metric-card" style="padding: 30px; border-color: {'#ff4444' if typing else '#30363d'};">
+            <div style="font-size:0.8rem; color:#8b949e; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">Currently Typing</div>
+            <div style="font-size:1.6rem; font-weight:700; color:{color}; font-family:'Courier New',monospace; min-height:2.2rem;">{display}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+current_command_widget()
 
 # ── Two-column layout ─────────────────────────────────────────────────────
 left, right = st.columns([3, 2])
