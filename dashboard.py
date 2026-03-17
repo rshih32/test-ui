@@ -91,7 +91,9 @@ def parse_logs():
 
 # ── Banner ──────────────────────────────────────────────────────────────
 if os.path.exists(BANNER_PATH):
-    st.image(Image.open(BANNER_PATH), use_container_width=True)
+    banner = Image.open(BANNER_PATH)
+    banner = banner.resize((banner.width, banner.height // 2))
+    st.image(banner, use_container_width=True)
 else:
     st.warning("Banner image not found. Save banner.png to the project folder.")
 
