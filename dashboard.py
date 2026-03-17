@@ -4,9 +4,9 @@ import time
 import io
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
+import realtime
 
 LOG_FILE    = os.path.join(os.path.expanduser("~"), "Desktop", "command_logs", "commands.txt")
-KEYS_FILE   = os.path.join(os.path.expanduser("~"), "Desktop", "command_logs", "keystrokes.txt")
 BANNER_PATH = os.path.join(os.path.dirname(__file__), "banner.png")
 
 APP_NAME    = "SHADOWLOG"
@@ -54,30 +54,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
-def get_current_command():
-    if not os.path.exists(KEYS_FILE):
-        return ""
-    with open(KEYS_FILE, "r") as f:
-        lines = f.readlines()
-    last_enter = -1
-    for i, line in enumerate(lines):
-        if "[ENTER]" in line:
-            last_enter = i
-    buf = []
-    for line in lines[last_enter + 1:]:
-        # Split on '] ' to extract key — handles spaces and special chars safely
-        parts = line.split('] ', 1)
-        if len(parts) < 2:
-            continue
-        key = parts[1].rstrip('\r\n')
-        if key == "[BACKSPACE]":
-            if buf: buf.pop()
-        elif key.startswith("[") and key.endswith("]"):
-            pass  # ignore arrow keys, ESC, etc.
-        else:
-            buf.append(key)
-    return "".join(buf)
 
 
 def parse_entries():
@@ -161,19 +137,7 @@ with left:
 
 with right:
     st.markdown('<div class="section-header">🎯 Current Command</div>', unsafe_allow_html=True)
-
-    @st.fragment(run_every=0.02)
-    def current_command_widget():
-        typing  = get_current_command()
-        display = f"$ {typing}▮" if typing else "&#x25AE; idle"
-        color   = "#ff6b6b" if typing else "#444"
-        border  = "#ff4444" if typing else "#30363d"
-        st.markdown(f"""<div class="metric-card" style="padding:14px 20px; border-color:{border};">
-            <div style="font-size:0.75rem;color:#8b949e;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Typing</div>
-            <div style="font-size:1.3rem;font-weight:700;color:{color};font-family:'Courier New',monospace;min-height:1.8rem;">{display}</div>
-        </div>""", unsafe_allow_html=True)
-
-    current_command_widget()
+    realtime.render()
 
 # ── Command Log ───────────────────────────────────────────────────────────
 st.markdown('<div class="section-header">📋 Command Log</div>', unsafe_allow_html=True)
